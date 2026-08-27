@@ -1293,10 +1293,36 @@ class SomfyProtexialElementsCardEditor extends HTMLElement {
   }
 
   setConfig(config) {
-    this._config = { ...config };
+    const nextConfig = { ...config };
+
+    // Home Assistant can call `hass` before `setConfig()` when an existing
+    // card is reopened in the dashboard editor. In that case the ha-form
+    // may already have been built with an empty configuration.
+    //
+    // Compare the normalized form values BEFORE replacing this._config.
+    // If the incoming saved configuration is genuinely different, update
+    // form.data once so the previously selected device is restored.
+    //
+    // When the change comes from this editor itself, _fire() has already
+    // stored the same config in this._config, so no form.data reassignment
+    // occurs. This avoids recreating / refreshing the open device selector.
+    const previousData = this._formData();
+    const nextData = this._formDataFor(nextConfig);
+    const configChanged =
+      JSON.stringify(previousData) !== JSON.stringify(nextData);
+
+    this._config = nextConfig;
 
     if (!this._built) {
       this._render();
+      return;
+    }
+
+    if (configChanged) {
+      const form = this.shadowRoot.getElementById("form");
+      if (form) {
+        form.data = nextData;
+      }
     }
   }
 
@@ -1309,14 +1335,18 @@ class SomfyProtexialElementsCardEditor extends HTMLElement {
     }));
   }
 
-  _formData() {
+  _formDataFor(config = {}) {
     return {
-      device_id: this._config.device_id || "",
-      title: this._config.title || "",
-      only_problems: this._config.only_problems === true,
-      show_entity_id: this._config.show_entity_id === true,
-      compact: this._config.compact === true,
+      device_id: config.device_id || "",
+      title: config.title || "",
+      only_problems: config.only_problems === true,
+      show_entity_id: config.show_entity_id === true,
+      compact: config.compact === true,
     };
+  }
+
+  _formData() {
+    return this._formDataFor(this._config);
   }
 
   _render() {
