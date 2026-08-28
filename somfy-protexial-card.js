@@ -1155,8 +1155,11 @@ if (!window.customCards.some(card => card.type === "somfy-protexial-card")) {
   });
 }
 
-/* Somfy Protexial Elements Card */
-const ELEMENTS_CARD_VERSION = "v2.1.1";
+/* ========================================================
+   Somfy Protexial / Protexiom Card - Elements
+   ======================================================== */
+
+const ELEMENTS_CARD_VERSION = "v2.1.8";
 
 const ELEMENTS_TRANSLATIONS = {
   fr: {
@@ -1287,6 +1290,9 @@ class SomfyProtexialElementsCardEditor extends HTMLElement {
     this._hass = hass;
     this._language = newLanguage;
 
+    // Build the form only once during normal Home Assistant updates.
+    // Rebuilding/reassigning form.hass continuously can make the
+    // device selector close/reopen while its menu is displayed.
     if (!this._built || languageChanged) {
       this._render();
     }
@@ -1295,17 +1301,10 @@ class SomfyProtexialElementsCardEditor extends HTMLElement {
   setConfig(config) {
     const nextConfig = { ...config };
 
-    // Home Assistant can call `hass` before `setConfig()` when an existing
-    // card is reopened in the dashboard editor. In that case the ha-form
-    // may already have been built with an empty configuration.
-    //
-    // Compare the normalized form values BEFORE replacing this._config.
-    // If the incoming saved configuration is genuinely different, update
-    // form.data once so the previously selected device is restored.
-    //
-    // When the change comes from this editor itself, _fire() has already
-    // stored the same config in this._config, so no form.data reassignment
-    // occurs. This avoids recreating / refreshing the open device selector.
+    // When an existing card is reopened, Home Assistant may call `hass`
+    // before `setConfig()`. The form may therefore already exist with an
+    // empty device_id. Restore the saved configuration only when it is
+    // genuinely different from the editor's current configuration.
     const previousData = this._formData();
     const nextData = this._formDataFor(nextConfig);
     const configChanged =
@@ -1318,6 +1317,9 @@ class SomfyProtexialElementsCardEditor extends HTMLElement {
       return;
     }
 
+    // Do not reassign form.data for changes originating from this same
+    // editor: _fire() already stored the new config before Home Assistant
+    // calls setConfig() back. This prevents selector refresh loops.
     if (configChanged) {
       const form = this.shadowRoot.getElementById("form");
       if (form) {
@@ -1356,13 +1358,20 @@ class SomfyProtexialElementsCardEditor extends HTMLElement {
 
     this.shadowRoot.innerHTML = `
       <style>
-        :host { display:block; }
-        ha-form { display:block; }
+        :host {
+          display:block;
+        }
+
+        ha-form {
+          display:block;
+        }
       </style>
+
       <ha-form id="form"></ha-form>
     `;
 
     const form = this.shadowRoot.getElementById("form");
+
     form.hass = this._hass;
     form.schema = [
       { name: "device_id", selector: { device: {} } },
@@ -1371,6 +1380,7 @@ class SomfyProtexialElementsCardEditor extends HTMLElement {
       { name: "show_entity_id", selector: { boolean: {} } },
       { name: "compact", selector: { boolean: {} } },
     ];
+
     form.data = this._formData();
 
     form.computeLabel = field => {
@@ -1381,15 +1391,17 @@ class SomfyProtexialElementsCardEditor extends HTMLElement {
         show_entity_id: et(this._hass, "showEntityId"),
         compact: et(this._hass, "compact"),
       };
+
       return labels[field.name] || field.name;
     };
 
     form.addEventListener("value-changed", event => {
       event.stopPropagation();
 
+      const values = event.detail?.value || {};
       const newConfig = {
         ...this._config,
-        ...(event.detail?.value || {}),
+        ...values,
       };
 
       this._fire(newConfig);
@@ -1412,6 +1424,13 @@ class SomfyProtexialElementsCard extends HTMLElement {
     // Preserve collapsed/open sections across Home Assistant state updates.
     this._collapsedGroups = new Set();
     this._collapsedSubgroups = new Set();
+
+    // null = use the saved "only_problems" configuration.
+    // true/false = temporary filter selected from the header error counter.
+    this._errorFilterOverride = null;
+
+    // Track which device currently owns the restored UI state.
+    this._uiStateDeviceId = null;
   }
 
   static getConfigElement() {
@@ -1430,13 +1449,99 @@ class SomfyProtexialElementsCard extends HTMLElement {
 
   setConfig(config) {
     if (!config) throw new Error("Invalid configuration");
+
+    const previousDeviceId = this.config?.device_id || "";
+    const previousOnlyProblems = this.config?.only_problems === true;
+
+    const nextDeviceId = config.device_id || "";
+    const nextOnlyProblems = config.only_problems === true;
+
+    // Before switching devices, persist the current UI state for the old one.
+    if (previousDeviceId && previousDeviceId !== nextDeviceId) {
+      this._saveUiState(previousDeviceId);
+    }
+
     this.config = {
-      device_id: config.device_id || "",
+      device_id: nextDeviceId,
       title: config.title || "",
-      only_problems: config.only_problems === true,
+      only_problems: nextOnlyProblems,
       show_entity_id: config.show_entity_id === true,
       compact: config.compact === true,
     };
+
+    // Restore the UI state when this card is first loaded or when the selected
+    // Somfy device changes.
+    if (this._uiStateDeviceId !== nextDeviceId) {
+      this._loadUiState(nextDeviceId);
+    } else if (previousOnlyProblems !== nextOnlyProblems) {
+      // A persistent editor setting explicitly changed: let that new setting
+      // take precedence over the temporary header filter.
+      this._errorFilterOverride = null;
+      this._saveUiState(nextDeviceId);
+    }
+  }
+
+  _uiStorageKey(deviceId) {
+    if (!deviceId) return "";
+    return `somfy-protexial-elements-card-ui:${deviceId}`;
+  }
+
+  _saveUiState(deviceId = this.config?.device_id) {
+    const key = this._uiStorageKey(deviceId);
+    if (!key) return;
+
+    try {
+      const state = {
+        collapsedGroups: [...this._collapsedGroups],
+        collapsedSubgroups: [...this._collapsedSubgroups],
+        errorFilter: this._onlyProblemsActive(),
+      };
+
+      window.localStorage.setItem(key, JSON.stringify(state));
+    } catch (error) {
+      console.debug(
+        "Somfy Protexial Elements Card: unable to save UI state",
+        error
+      );
+    }
+  }
+
+  _loadUiState(deviceId = this.config?.device_id) {
+    this._collapsedGroups.clear();
+    this._collapsedSubgroups.clear();
+    this._errorFilterOverride = null;
+    this._uiStateDeviceId = deviceId || null;
+
+    const key = this._uiStorageKey(deviceId);
+    if (!key) return;
+
+    try {
+      const raw = window.localStorage.getItem(key);
+      if (!raw) return;
+
+      const state = JSON.parse(raw);
+
+      if (Array.isArray(state?.collapsedGroups)) {
+        this._collapsedGroups = new Set(
+          state.collapsedGroups.filter(value => typeof value === "string")
+        );
+      }
+
+      if (Array.isArray(state?.collapsedSubgroups)) {
+        this._collapsedSubgroups = new Set(
+          state.collapsedSubgroups.filter(value => typeof value === "string")
+        );
+      }
+
+      if (typeof state?.errorFilter === "boolean") {
+        this._errorFilterOverride = state.errorFilter;
+      }
+    } catch (error) {
+      console.debug(
+        "Somfy Protexial Elements Card: unable to restore UI state",
+        error
+      );
+    }
   }
 
   set hass(hass) {
@@ -1506,7 +1611,7 @@ class SomfyProtexialElementsCard extends HTMLElement {
     );
   }
 
-  _elements() {
+  _allElements() {
     if (!this.config?.device_id) return [];
 
     const ids = new Set(this._deviceEntityIds());
@@ -1522,9 +1627,25 @@ class SomfyProtexialElementsCard extends HTMLElement {
         .filter(entity => this._isElementSensor(entity));
     }
 
-    return elements
-      .filter(entity => !this.config.only_problems || entity.state === "on")
-      .sort((a, b) => this._name(a).localeCompare(this._name(b)));
+    return elements.sort((a, b) =>
+      this._name(a).localeCompare(this._name(b))
+    );
+  }
+
+  _onlyProblemsActive() {
+    return this._errorFilterOverride !== null
+      ? this._errorFilterOverride
+      : this.config.only_problems === true;
+  }
+
+  _elements() {
+    const elements = this._allElements();
+
+    if (!this._onlyProblemsActive()) {
+      return elements;
+    }
+
+    return elements.filter(entity => entity.state === "on");
   }
 
   _mainCategory(entity) {
@@ -1609,13 +1730,60 @@ class SomfyProtexialElementsCard extends HTMLElement {
 
 
   _name(entity) {
+    let name = "";
+
     try {
-      return this._hass.formatEntityName(entity) ||
+      name =
+        this._hass.formatEntityName(entity) ||
         entity.attributes?.friendly_name ||
         entity.entity_id;
     } catch (_) {
-      return entity.attributes?.friendly_name || entity.entity_id;
+      name = entity.attributes?.friendly_name || entity.entity_id;
     }
+
+    let shortened = String(name || "").trim();
+
+    // Remove standard Somfy product prefixes when present.
+    shortened = shortened
+      .replace(
+        /^\s*somfy\s+(?:protexial(?:\s+io)?|protexiom)\s*(?:[-–—:]\s*)?/i,
+        ""
+      )
+      .trim();
+
+    // Home Assistant can prefix every element with the name of the alarm /
+    // control panel. Keep only the actual Somfy equipment label, starting
+    // from a known equipment type.
+    //
+    // Examples:
+    // "Alarm DO Window"          -> "DO Window"
+    // "Alarm DM Garage"          -> "DM Garage"
+    // "Alarm Tr Tél - Bedroom"   -> "Tr Tél - Bedroom"
+    // "Alarm Sir ext - Garden"   -> "Sir ext - Garden"
+    // "Alarm Cl lcd - Entrance"  -> "Cl lcd - Entrance"
+    // "Alarm TC multi - User"    -> "TC multi - User"
+    // "Alarm Badge - User"       -> "Badge - User"
+    const equipmentStart = new RegExp(
+      "^.*?\\b(" +
+        "(?:DO|DM)" +
+        "|(?:TR(?:\\s+T[ÉE]L)?)" +
+        "|(?:SIR(?:[ÈE]NE)?(?:\\s+(?:EXT|INT))?)" +
+        "|(?:CL(?:\\s+LCD)?)" +
+        "|(?:CLAVIER)" +
+        "|(?:TC(?:\\s+(?:4|MULTI))?)" +
+        "|(?:BADGE)" +
+        "|(?:TRANSMETTEUR)" +
+        "|(?:T[ÉE]L[ÉE]COMMANDE)" +
+      ")\\b(.*)$",
+      "i"
+    );
+
+    const match = shortened.match(equipmentStart);
+    if (match) {
+      shortened = `${match[1]}${match[2]}`.trim();
+    }
+
+    return shortened || name;
   }
 
   _stateLabel(entity) {
@@ -1738,7 +1906,7 @@ class SomfyProtexialElementsCard extends HTMLElement {
     // Remove integration prefixes that can differ between installations.
     objectId = objectId
       .replace(/^somfy_protexial_/, "")
-      .replace(/^somfy_protexiom_/, "");
+      .replace(/^somfy_protexiom_/, "")
 
     // Remove role suffixes.
     objectId = objectId
@@ -1933,14 +2101,19 @@ class SomfyProtexialElementsCard extends HTMLElement {
   _render() {
     if (!this._hass || !this.config) return;
 
+    const allElements = this._allElements();
     const elements = this._elements();
+    const errorCount = allElements.filter(entity => entity.state === "on").length;
+    const errorFilterActive = this._onlyProblemsActive();
 
     if (this.config.device_id && !this._registryLoading) {
       console.debug(`[Somfy Protexial Elements Card ${ELEMENTS_CARD_VERSION}]`, {
         device_id: this.config.device_id,
         registry_device_entities: this._deviceEntityIds(),
-        detected_elements: elements.map(e => e.entity_id),
-        pause_switches: elements.map(e => {
+        detected_elements: allElements.map(e => e.entity_id),
+        displayed_elements: elements.map(e => e.entity_id),
+        error_filter_active: errorFilterActive,
+        pause_switches: allElements.map(e => {
           const sw = this._pauseSwitchForElement(e);
           return {
             element: e.entity_id,
@@ -1982,6 +2155,23 @@ class SomfyProtexialElementsCard extends HTMLElement {
           font-weight:700;
         }
         .stat ha-icon { --mdc-icon-size:15px; }
+        button.stat {
+          border:0;
+          font:inherit;
+          cursor:pointer;
+          appearance:none;
+          transition:transform .12s ease, box-shadow .12s ease, background .12s ease;
+        }
+        button.stat:hover {
+          transform:translateY(-1px);
+        }
+        button.stat:active {
+          transform:translateY(0);
+        }
+        button.stat.filter-active {
+          box-shadow:inset 0 0 0 2px var(--error-color,#db4437);
+          background:color-mix(in srgb, var(--error-color,#db4437) 18%, var(--secondary-background-color));
+        }
         .stat.error {
           color:var(--error-color,#db4437);
           background:color-mix(in srgb, var(--error-color,#db4437) 10%, var(--secondary-background-color));
@@ -2151,13 +2341,17 @@ class SomfyProtexialElementsCard extends HTMLElement {
           <div class="header-stats">
             <div class="stat" title="${et(this._hass, "total")}">
               <ha-icon icon="mdi:devices"></ha-icon>
-              <span>${elements.length}</span>
+              <span>${allElements.length}</span>
             </div>
-            <div class="stat ${elements.filter(entity => entity.state === "on").length ? "error" : "ok"}"
-                 title="${et(this._hass, "errors")}">
+            <button
+              type="button"
+              class="stat ${errorCount ? "error" : "ok"} ${errorFilterActive ? "filter-active" : ""}"
+              data-error-filter
+              aria-pressed="${errorFilterActive ? "true" : "false"}"
+              title="${et(this._hass, "errors")}">
               <ha-icon icon="mdi:alert-circle-outline"></ha-icon>
-              <span>${elements.filter(entity => entity.state === "on").length}</span>
-            </div>
+              <span>${errorCount}</span>
+            </button>
           </div>
         </div>
 
@@ -2177,13 +2371,31 @@ class SomfyProtexialElementsCard extends HTMLElement {
           ].join("");
         })() : `
           <div class="empty">
-            ${this.config.device_id ? et(this._hass, "noElements") : et(this._hass, "noDevice")}
+            ${this.config.device_id
+              ? (errorFilterActive && allElements.length
+                  ? et(this._hass, "allOk")
+                  : et(this._hass, "noElements"))
+              : et(this._hass, "noDevice")}
           </div>
         `}
 
         <div class="footer">Somfy Protexial Elements Card ${ELEMENTS_CARD_VERSION}</div>
       </ha-card>
     `;
+
+    const errorFilterButton = this.shadowRoot.querySelector("[data-error-filter]");
+    if (errorFilterButton) {
+      errorFilterButton.addEventListener("click", event => {
+        event.preventDefault();
+        event.stopPropagation();
+
+        const currentlyFiltered = this._onlyProblemsActive();
+        this._errorFilterOverride = !currentlyFiltered;
+
+        this._saveUiState();
+        this._render();
+      });
+    }
 
     this.shadowRoot.querySelectorAll("[data-toggle-group]").forEach(button => {
       button.addEventListener("click", event => {
@@ -2200,6 +2412,8 @@ class SomfyProtexialElementsCard extends HTMLElement {
         } else {
           this._collapsedGroups.delete(key);
         }
+
+        this._saveUiState();
       });
     });
 
@@ -2218,6 +2432,8 @@ class SomfyProtexialElementsCard extends HTMLElement {
         } else {
           this._collapsedSubgroups.delete(key);
         }
+
+        this._saveUiState();
       });
     });
 
