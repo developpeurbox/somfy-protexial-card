@@ -10,7 +10,7 @@
    Somfy Protexial / Protexiom Card
    ======================================================== */
 
-const CARD_VERSION = "v2.1.6";
+const CARD_VERSION = "v2.1.7";
 
 const ALARM_FEATURES = {
   ARM_HOME: 1,
@@ -1056,8 +1056,19 @@ class SomfyProtexialCard extends HTMLElement {
 
   async _callAlarmAction(action) {
     const entity = this._getState(this.config.alarm_entity);
-    const codeRequired = Boolean(entity?.attributes?.code_format || entity?.attributes?.code_arm_required === true);
-    let code = this.config.alarm_code;
+
+    // Home Assistant exposes two complementary attributes for alarm codes:
+    // - code_format: a code exists / can be entered.
+    // - code_arm_required: the code is also required when arming.
+    // This gives the three supported modes:
+    //   1. no code_format                         -> no PIN
+    //   2. code_format + code_arm_required=false -> PIN only to disarm
+    //   3. code_format + code_arm_required=true  -> PIN to arm and disarm
+    const hasCode = Boolean(entity?.attributes?.code_format);
+    const isArming = ["arm_home", "arm_away", "arm_night"].includes(action);
+    const codeRequired = hasCode && (!isArming || entity?.attributes?.code_arm_required === true);
+
+    let code = codeRequired ? this.config.alarm_code : undefined;
     if (codeRequired && !code) {
       code = await this._showModal({
         title: tr(this._hass, "codeTitle"),
