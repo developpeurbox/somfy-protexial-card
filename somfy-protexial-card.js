@@ -1183,7 +1183,7 @@ if (!window.customCards.some(card => card.type === "somfy-protexial-card")) {
    Somfy Protexial / Protexiom Card - Elements
    ======================================================== */
 
-const ELEMENTS_CARD_VERSION = "v2.1.8";
+const ELEMENTS_CARD_VERSION = "v2.1.9";
 
 const ELEMENTS_TRANSLATIONS = {
   fr: {
@@ -1982,6 +1982,36 @@ class SomfyProtexialElementsCard extends HTMLElement {
     return fallback || null;
   }
 
+  _memoryButtons() {
+    const deviceIds = new Set(this._deviceEntityIds());
+    const registry = Array.isArray(this._entityRegistry) ? this._entityRegistry : [];
+    const findButton = (action, frenchName) => {
+      return Object.values(this._hass?.states || {}).find(state => {
+        if (!state.entity_id.startsWith("button.")) return false;
+        if (deviceIds.size && !deviceIds.has(state.entity_id)) return false;
+        const reg = registry.find(item => item.entity_id === state.entity_id);
+        const uniqueId = String(reg?.unique_id || "").toLowerCase();
+        const name = String(state.attributes?.friendly_name || "").toLowerCase();
+        return uniqueId.endsWith(`_memory_${action}`) ||
+          name.includes(frenchName) ||
+          name.includes(action === "open" ? "open memory" : "close memory");
+      }) || null;
+    };
+    return {
+      open: findButton("open", "ouverture mémoire"),
+      close: findButton("close", "fermeture mémoire"),
+    };
+  }
+
+  async _pressMemoryButton(entityId) {
+    if (!this._hass?.states?.[entityId]) return;
+    try {
+      await this._hass.callService("button", "press", {}, { entity_id: entityId });
+    } catch (error) {
+      console.error("Somfy Protexial Elements Card: memory action failed", entityId, error);
+    }
+  }
+
   async _togglePauseSwitch(entityId) {
     const pauseSwitch = this._hass?.states?.[entityId];
     if (!pauseSwitch) return;
@@ -2016,7 +2046,13 @@ class SomfyProtexialElementsCard extends HTMLElement {
     const icon = attrs.icon ||
       (problem ? "mdi:alert-circle-outline" : "mdi:check-circle-outline");
 
-    const pauseSwitch = this._pauseSwitchForElement(entity);
+    const isCentral = this._technicalSubcategory(entity) === "control" &&
+      (String(attrs.Zone || "").toUpperCase() === "SYS" ||
+        /centrale|central|transmetteur|transmitter/i.test(
+          `${entity.entity_id} ${attrs.friendly_name || ""}`
+        ));
+    const memoryButtons = isCentral ? this._memoryButtons() : null;
+    const pauseSwitch = isCentral ? null : this._pauseSwitchForElement(entity);
     const active = pauseSwitch?.state === "on";
     const paused = pauseSwitch?.state === "off";
 
@@ -2033,6 +2069,20 @@ class SomfyProtexialElementsCard extends HTMLElement {
           <div class="summary ${problem ? "problem" : "ok"}">
             ${this._stateLabel(entity)}
           </div>
+          ${memoryButtons?.open ? `
+            <button type="button" class="pause-button active"
+              data-memory-button="${memoryButtons.open.entity_id}"
+              title="Ouverture mémoire">
+              <ha-icon icon="mdi:lock-open-outline"></ha-icon>
+              <span>Ouverture mémoire</span>
+            </button>` : ""}
+          ${memoryButtons?.close ? `
+            <button type="button" class="pause-button active"
+              data-memory-button="${memoryButtons.close.entity_id}"
+              title="Fermeture mémoire">
+              <ha-icon icon="mdi:lock-outline"></ha-icon>
+              <span>Fermeture mémoire</span>
+            </button>` : ""}
           ${pauseSwitch ? `
             <button
               type="button"
@@ -2458,6 +2508,13 @@ class SomfyProtexialElementsCard extends HTMLElement {
         }
 
         this._saveUiState();
+      });
+    });
+
+    this.shadowRoot.querySelectorAll("[data-memory-button]").forEach(button => {
+      button.addEventListener("click", event => {
+        event.stopPropagation();
+        this._pressMemoryButton(button.dataset.memoryButton);
       });
     });
 
