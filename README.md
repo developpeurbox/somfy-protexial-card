@@ -63,17 +63,24 @@ Elles disposent d'un **éditeur graphique**, s'adaptent automatiquement aux thè
 
 1. Ouvrir **HACS**
 2. Aller dans **Frontend**
-3. Ouvrir le menu **⋮**
-4. Choisir **Dépôts personnalisés**
-5. Ajouter :
+3. Rechercher **Somfy Protexial Card**
+4. Installer **Somfy Protexial Card**
+5. Recharger Home Assistant si nécessaire puis vider le cache du navigateur / de l'application
+
+#### Alternative : dépôt personnalisé
+
+Si la carte n'apparaît pas dans la recherche HACS, l'ajouter comme dépôt personnalisé :
+
+1. Dans **HACS** → **Frontend**, ouvrir le menu **⋮**
+2. Choisir **Dépôts personnalisés**
+3. Ajouter :
 
 ```text
-https://github.com/AuroreVgn/somfy-protexial-card
+https://github.com/developpeurbox/somfy-protexial-card
 ```
 
-6. Sélectionner la catégorie **Lovelace**
-7. Installer **Somfy Protexial Card**
-8. Recharger Home Assistant si nécessaire puis vider le cache du navigateur / de l'application
+4. Sélectionner la catégorie **Lovelace**
+5. Installer **Somfy Protexial Card**, puis recharger Home Assistant et vider le cache du navigateur / de l'application
 
 Une seule ressource JavaScript est installée par HACS :
 

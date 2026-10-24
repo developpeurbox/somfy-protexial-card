@@ -12,6 +12,12 @@
 
 const CARD_VERSION = "v2.1.8";
 
+// Escapes entity data and config strings before they are interpolated into
+// innerHTML templates (text nodes and quoted attribute values).
+function escapeHtml(value) {
+  return String(value ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+
 const ALARM_FEATURES = {
   ARM_HOME: 1,
   ARM_AWAY: 2,
@@ -778,7 +784,7 @@ class SomfyProtexialCard extends HTMLElement {
       <ha-card class="card">
         <div class="alarm-section">
           <div class="topline">
-            <div class="section-title">${this.config.title || tr(this._hass, "defaultTitle")}</div>
+            <div class="section-title">${escapeHtml(this.config.title || tr(this._hass, "defaultTitle"))}</div>
             ${(this.config.show_refresh || (this.config.show_last_sync && lastSyncText)) ? `
               <div class="refresh-zone">
                 <div class="status-sync-stack">
@@ -797,9 +803,9 @@ class SomfyProtexialCard extends HTMLElement {
           </div>
           <div class="alarm-row">
             <div class="alarm-icon-wrap"><ha-icon icon="mdi:shield-home" style="--mdc-icon-size:26px"></ha-icon></div>
-            <div class="alarm-info" data-more-info="${this.config.alarm_entity}" title="${tr(this._hass, "clickDetails")}">
-              <span class="alarm-name">${this._formatName(alarm.entity, "alarm")}</span>
-              <div class="alarm-state-row"><span class="alarm-state">${alarm.label}</span><span class="alarm-since">${this._sinceLabel(this.config.alarm_entity)}</span></div>
+            <div class="alarm-info" data-more-info="${escapeHtml(this.config.alarm_entity)}" title="${tr(this._hass, "clickDetails")}">
+              <span class="alarm-name">${escapeHtml(this._formatName(alarm.entity, "alarm"))}</span>
+              <div class="alarm-state-row"><span class="alarm-state">${escapeHtml(alarm.label)}</span><span class="alarm-since">${escapeHtml(this._sinceLabel(this.config.alarm_entity))}</span></div>
             </div>
             <div class="alarm-actions">
               ${alarmActions.map(action => `<button class="btn ${action.cls}" data-alarm-action="${action.key}"><ha-icon icon="${action.icon}"></ha-icon>${tr(this._hass, action.label)}</button>`).join("")}
@@ -812,25 +818,25 @@ class SomfyProtexialCard extends HTMLElement {
           ${activeSensors.length ? activeSensors.map(sensor => {
             const values = this._sensorValues(sensor);
             const label = this.config.labels[sensor.key] || this._formatName(values.entity, sensor.defaultText);
-            return `<div class="sensor-row" data-key="${sensor.key}" ${values.entityId ? `data-more-info="${values.entityId}"` : ""}>
-              <ha-icon class="sensor-icon" icon="${values.icon}"></ha-icon>
-              <span class="sensor-label">${label}</span>
-              <span class="sensor-status" style="color:${values.statusColor}"><span class="dot" style="background:${values.dotColor}"></span><span class="sensor-val">${values.statusLabel}</span></span>
+            return `<div class="sensor-row" data-key="${sensor.key}" ${values.entityId ? `data-more-info="${escapeHtml(values.entityId)}"` : ""}>
+              <ha-icon class="sensor-icon" icon="${escapeHtml(values.icon)}"></ha-icon>
+              <span class="sensor-label">${escapeHtml(label)}</span>
+              <span class="sensor-status" style="color:${values.statusColor}"><span class="dot" style="background:${values.dotColor}"></span><span class="sensor-val">${escapeHtml(values.statusLabel)}</span></span>
             </div>`;
           }).join("") : `<div class="ok-box">${tr(this._hass, "noSensors")}</div>`}
         </div>
 
         ${this.config.show_faults ? `<div class="section">
           <div class="section-head"><div class="section-title">${tr(this._hass, "faultsTitle")}${faultEntities.length ? ` (${faultEntities.length})` : ""}</div></div>
-          ${faultEntities.length ? faultEntities.map(entity => `<div class="fault-row" data-more-info="${entity.entity_id}">
-            <ha-icon class="fault-icon" icon="${this._entityIcon(entity)}"></ha-icon>
-            <div class="fault-info"><div class="fault-name">${this._formatName(entity, "faultsTitle")}</div><div class="fault-state">${this._formatState(entity)}</div></div>
+          ${faultEntities.length ? faultEntities.map(entity => `<div class="fault-row" data-more-info="${escapeHtml(entity.entity_id)}">
+            <ha-icon class="fault-icon" icon="${escapeHtml(this._entityIcon(entity))}"></ha-icon>
+            <div class="fault-info"><div class="fault-name">${escapeHtml(this._formatName(entity, "faultsTitle"))}</div><div class="fault-state">${escapeHtml(this._formatState(entity))}</div></div>
           </div>`).join("") : `<div class="ok-box"><ha-icon icon="mdi:check-circle"></ha-icon>${tr(this._hass, "noFaults")}</div>`}
         </div>` : ""}
 
         ${resets.length ? `<div class="section">
           <div class="section-head"><div class="section-title">${tr(this._hass, "resetsTitle")}</div></div>
-          <div class="reset-grid">${resets.map(reset => `<button class="btn reset-btn" data-reset-key="${reset.key}" data-entity-id="${reset.entityId}"><ha-icon icon="${reset.icon}"></ha-icon><span>${tr(this._hass, reset.text)}</span></button>`).join("")}</div>
+          <div class="reset-grid">${resets.map(reset => `<button class="btn reset-btn" data-reset-key="${reset.key}" data-entity-id="${escapeHtml(reset.entityId)}"><ha-icon icon="${reset.icon}"></ha-icon><span>${tr(this._hass, reset.text)}</span></button>`).join("")}</div>
         </div>` : ""}
 
         <div class="footer">
@@ -2058,12 +2064,12 @@ class SomfyProtexialElementsCard extends HTMLElement {
 
     return `
       <div class="element">
-        <div class="head" data-more-info="${entity.entity_id}">
-          <ha-icon class="main-icon ${problem ? "problem" : "ok"}" icon="${icon}"></ha-icon>
+        <div class="head" data-more-info="${escapeHtml(entity.entity_id)}">
+          <ha-icon class="main-icon ${problem ? "problem" : "ok"}" icon="${escapeHtml(icon)}"></ha-icon>
           <div class="info">
-            <div class="name">${this._name(entity)}</div>
+            <div class="name">${escapeHtml(this._name(entity))}</div>
             ${this.config.show_entity_id
-              ? `<div class="entity-id">${entity.entity_id}</div>`
+              ? `<div class="entity-id">${escapeHtml(entity.entity_id)}</div>`
               : ""}
           </div>
           <div class="summary ${problem ? "problem" : "ok"}">
@@ -2071,14 +2077,14 @@ class SomfyProtexialElementsCard extends HTMLElement {
           </div>
           ${memoryButtons?.open ? `
             <button type="button" class="pause-button active"
-              data-memory-button="${memoryButtons.open.entity_id}"
+              data-memory-button="${escapeHtml(memoryButtons.open.entity_id)}"
               title="Ouverture mémoire">
               <ha-icon icon="mdi:lock-open-outline"></ha-icon>
               <span>Ouverture mémoire</span>
             </button>` : ""}
           ${memoryButtons?.close ? `
             <button type="button" class="pause-button active"
-              data-memory-button="${memoryButtons.close.entity_id}"
+              data-memory-button="${escapeHtml(memoryButtons.close.entity_id)}"
               title="Fermeture mémoire">
               <ha-icon icon="mdi:lock-outline"></ha-icon>
               <span>Fermeture mémoire</span>
@@ -2087,7 +2093,7 @@ class SomfyProtexialElementsCard extends HTMLElement {
             <button
               type="button"
               class="pause-button ${paused ? "paused" : "active"}"
-              data-pause-switch="${pauseSwitch.entity_id}"
+              data-pause-switch="${escapeHtml(pauseSwitch.entity_id)}"
               title="${active
                 ? et(this._hass, "pauseTitle")
                 : et(this._hass, "reactivateTitle")}">
@@ -2107,7 +2113,7 @@ class SomfyProtexialElementsCard extends HTMLElement {
                 <div class="attr-info">
                   <div class="attr-label">${et(this._hass, def.tkey)}</div>
                   <div class="attr-value ${def.neutral ? "neutral" : ok ? "ok" : "problem"}">
-                    ${this._human(value)}
+                    ${escapeHtml(this._human(value))}
                   </div>
                 </div>
               </div>`;
@@ -2411,7 +2417,7 @@ class SomfyProtexialElementsCard extends HTMLElement {
       </style>
       <ha-card>
         <div class="header">
-          <div class="title">${title}</div>
+          <div class="title">${escapeHtml(title)}</div>
           <div class="header-stats">
             <div class="stat" title="${et(this._hass, "total")}">
               <ha-icon icon="mdi:devices"></ha-icon>
@@ -2633,7 +2639,7 @@ class SomfyProtexialEventsCard extends HTMLElement {
     this._rendered=false;
   }
   set hass(hass){ this._hass=hass; this._render(); }
-  _escape(value){ return String(value ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
+  _escape(value){ return escapeHtml(value); }
   _findEntity(){
     if (this.config.entity && this._hass?.states?.[this.config.entity]) return this.config.entity;
     return Object.values(this._hass?.states||{}).find(e => {
