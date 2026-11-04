@@ -795,7 +795,7 @@ class SomfyProtexialCard extends HTMLElement {
                   ${this.config.show_last_sync && lastSyncText ? `
                     <div class="refresh-sync">
                       <span class="refresh-sync-label">${tr(this._hass, "lastSync")}</span>
-                      <span class="refresh-sync-value">${lastSyncText}</span>
+                      <span class="refresh-sync-value">${escapeHtml(lastSyncText)}</span>
                     </div>` : ""}
                 </div>
                 ${this.config.show_refresh ? `<button class="refresh-icon-btn" data-refresh title="${tr(this._hass, "refresh")}"><ha-icon icon="mdi:refresh"></ha-icon></button>` : ""}
