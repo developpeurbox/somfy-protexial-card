@@ -1,6 +1,6 @@
 [![PayPal](https://img.shields.io/badge/paypal-me-blue.svg?style=for-the-badge&color=purple&logo=paypal&logoColor=ccc&link=https%3A%2F%2Fpaypal.me%2hlaissus/5)](https://paypal.me/hlaissus/5)
 [![GitHub Release]( https://img.shields.io/github/v/release/developpeurbox/somfy-protexial-card?style=for-the-badge)](https://github.com/developpeurbox/somfy-protexial-card/releases)
-[![hacs_badge](https://img.shields.io/badge/HACS-Custom-41BDF5.svg?style=for-the-badge)](https://github.com/hacs/integration)
+[![hacs_badge](https://img.shields.io/badge/HACS-Default-41BDF5.svg?style=for-the-badge)](https://github.com/hacs/integration)
 [![Community Forum]( https://img.shields.io/badge/community-forum-brightgreen.svg?style=for-the-badge)](https://community.home-assistant.io)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg?style=for-the-badge)](https://github.com/developpeurbox/somfy-protexial-card/blob/main/LICENSE)
 
@@ -61,26 +61,25 @@ Elles disposent d'un **éditeur graphique**, s'adaptent automatiquement aux thè
 
 ### Via HACS — recommandé
 
-1. Ouvrir **HACS**
-2. Aller dans **Frontend**
-3. Rechercher **Somfy Protexial Card**
-4. Installer **Somfy Protexial Card**
-5. Recharger Home Assistant si nécessaire puis vider le cache du navigateur / de l'application
+La carte est disponible directement dans le catalogue HACS, aucun dépôt personnalisé n'est nécessaire.
 
-#### Alternative : dépôt personnalisé
+> [!NOTE]
+> Avant la version **2026.11.0** de Home Assistant Core, cette section s'appelait **HACS**. Elle s'appelle désormais **Marketplace**.
 
-Si la carte n'apparaît pas dans la recherche HACS, l'ajouter comme dépôt personnalisé :
+1. Ouvrir **HACS** (**Marketplace** à partir de Home Assistant Core 2026.11.0)
+2. Rechercher **Somfy Protexial Card**
+3. Installer **Somfy Protexial Card**
+4. Recharger Home Assistant si nécessaire puis vider le cache du navigateur / de l'application
 
-1. Dans **HACS** → **Frontend**, ouvrir le menu **⋮**
+#### Installée avant le 05/11/2026 via un dépôt personnalisé ?
+
+Si la carte a été installée avant le **05/11/2026** en ajoutant `https://github.com/developpeurbox/somfy-protexial-card` comme dépôt personnalisé, ce dépôt personnalisé peut maintenant être supprimé :
+
+1. Dans **HACS** (ou **Marketplace**), ouvrir le menu **⋮**
 2. Choisir **Dépôts personnalisés**
-3. Ajouter :
+3. Supprimer `developpeurbox/somfy-protexial-card` de la liste
 
-```text
-https://github.com/developpeurbox/somfy-protexial-card
-```
-
-4. Sélectionner la catégorie **Lovelace**
-5. Installer **Somfy Protexial Card**, puis recharger Home Assistant et vider le cache du navigateur / de l'application
+La carte reste installée et continue de fonctionner, et les mises à jour arrivent désormais depuis le catalogue par défaut.
 
 Une seule ressource JavaScript est installée par HACS :
 
