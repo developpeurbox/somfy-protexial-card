@@ -1,7 +1,5 @@
 name: Release
 
-# Se déclenche uniquement quand somfy-protexial-card.js change sur main
-# (donc quand tu bumps CARD_VERSION). "Run workflow" dispo aussi.
 on:
   push:
     branches: [main]
@@ -16,7 +14,7 @@ jobs:
   release:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
@@ -39,10 +37,29 @@ jobs:
             echo "exists=false" >> "$GITHUB_OUTPUT"
           fi
 
+      - name: Générer le changelog
+        id: changelog
+        if: steps.check.outputs.exists == 'false'
+        run: |
+          PREV=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+          if [ -n "$PREV" ]; then
+            RANGE="$PREV..HEAD"
+          else
+            RANGE="HEAD"
+          fi
+          {
+            echo 'notes<<EOF'
+            git log $RANGE --pretty=format:'- %s (%h)' --no-merges --invert-grep --grep='^Bump'
+            echo
+            echo 'EOF'
+          } >> "$GITHUB_OUTPUT"
+
       - name: Créer le tag + la release
         if: steps.check.outputs.exists == 'false'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ steps.version.outputs.version }}
           name: v${{ steps.version.outputs.version }}
-          generate_release_notes: true
+          body: |
+            ## Changements
+            ${{ steps.changelog.outputs.notes }}
