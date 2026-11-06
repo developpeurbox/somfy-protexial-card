@@ -1,5 +1,7 @@
 name: Release
 
+# Se déclenche uniquement quand somfy-protexial-card.js change sur main
+# (donc quand tu bumps CARD_VERSION). "Run workflow" dispo aussi.
 on:
   push:
     branches: [main]
@@ -37,22 +39,15 @@ jobs:
             echo "exists=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Générer le changelog
-        id: changelog
+      - name: Préparer les notes (description du commit)
         if: steps.check.outputs.exists == 'false'
         run: |
-          PREV=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
-          if [ -n "$PREV" ]; then
-            RANGE="$PREV..HEAD"
-          else
-            RANGE="HEAD"
+          # Description étendue du dernier commit (sans la ligne de titre)
+          git log -1 --pretty=format:'%b' > RELEASE_NOTES.md
+          # Si la description est vide, on met un texte par défaut
+          if [ ! -s RELEASE_NOTES.md ]; then
+            echo "Version ${{ steps.version.outputs.version }}" > RELEASE_NOTES.md
           fi
-          {
-            echo 'notes<<EOF'
-            git log $RANGE --pretty=format:'- %s (%h)' --no-merges --invert-grep --grep='^Bump'
-            echo
-            echo 'EOF'
-          } >> "$GITHUB_OUTPUT"
 
       - name: Créer le tag + la release
         if: steps.check.outputs.exists == 'false'
@@ -60,6 +55,4 @@ jobs:
         with:
           tag_name: v${{ steps.version.outputs.version }}
           name: v${{ steps.version.outputs.version }}
-          body: |
-            ## Changements
-            ${{ steps.changelog.outputs.notes }}
+          body_path: RELEASE_NOTES.md
