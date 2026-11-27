@@ -10,7 +10,7 @@
    Somfy Protexial / Protexiom Card
    ======================================================== */
 
-const CARD_VERSION = "v2.2.0";
+const CARD_VERSION = "v2.2.1";
 
 // Escapes entity data and config strings before they are interpolated into
 // innerHTML templates (text nodes and quoted attribute values).
