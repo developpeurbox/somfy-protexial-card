@@ -1,6 +1,6 @@
 {
   "name": "Somfy Protexial Card",
-  "filename": "somfy-protexial-card.js",
   "content_in_root": true,
+  "filename": "somfy-protexial-card.js",
   "render_readme": true
 }
